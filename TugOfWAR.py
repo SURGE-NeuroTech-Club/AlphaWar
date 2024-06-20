@@ -6,9 +6,45 @@ import argparse
 import numpy as np
 import matplotlib.pyplot as plt
 from brainflow.board_shim import BoardShim, BrainFlowInputParams, BoardIds
+import pygame.mixer
+
 
 # Initialize Pygame
 pygame.init()
+# Initialize Pygame mixer
+pygame.mixer.init(frequency=20, size=-16, channels=2)
+ 
+def generate_sine_wave(frequency, duration=0.5, volume=0.5, sample_rate=256):
+    t = np.linspace(0, duration, int(sample_rate * duration), False)
+    wave = volume * np.sin(2 * np.pi * frequency * t)
+    return wave.astype(np.float32)
+ 
+def generate_sawtooth_wave(frequency, duration=0.5, volume=0.5, sample_rate=256):
+    t = np.linspace(0, duration, int(sample_rate * duration), False)
+    wave = volume * 2 * (t * frequency - np.floor(1/2 + t * frequency))
+    return wave.astype(np.float32)
+ 
+def play_sound_for_rope_position(rope_position):
+    frequency = 440 + 10 * abs(rope_position)**3  # Base frequency plus a factor of the rope position
+    if rope_position > 0:
+        waveform = generate_sine_wave(frequency)
+    else:
+        waveform = generate_sawtooth_wave(frequency)
+    sound = pygame.sndarray.make_sound(waveform.repeat(2).reshape((-1, 2)).copy(order='C'))
+    sound.play()
+
+# load the sounds
+buzzer_sound = pygame.mixer.Sound('buzzer.wav')
+def play_buzzer_sound():
+    pygame.mixer.Sound.play(buzzer_sound)
+
+bell_sound = pygame.mixer.Sound('bell.wav')
+def play_bell_sound():
+    pygame.mixer.Sound.play(bell_sound)
+
+winner_sound = pygame.mixer.Sound('winner.wav')
+def play_winner_sound():
+    pygame.mixer.Sound.play(winner_sound)
 
 # Set the font
 pygame.font.init()
@@ -72,24 +108,29 @@ while not quit_game:
         #     rope_control = 1
         # else:
         #     rope_control = 0
+                    
+        play_sound_for_rope_position((rope.left + rope.right)/2)
+        
 
         # game logic
         if rope_control < 0:
             rope.move_ip(-speed, 0)
-            time.sleep(0.02)
+            #time.sleep(0.02)
         elif rope_control > 0:
             rope.move_ip(speed, 0)
-            time.sleep(0.02)
+            #time.sleep(0.02)
 
         # Check if the rope has completely passed one of the player markers
-        if rope.right < player1.left or rope.left > player2.right:
-            # Determine the winner.
-            if rope.right < player1.left:
+        # Determine the winner.
+        if rope.right <= player1.left or rope.left >= player2.right:
+            if rope.right <= player1.left:
                 winner = 'Player 1'
-            elif rope.left > player2.right:
+                play_winner_sound()
+            elif rope.left >= player2.right:
                 winner = 'Player 2'
-
+                play_winner_sound()
             running = False
+            play_winner_sound()
 
 
         # drawing

@@ -11,6 +11,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from dtaidistance import dtw
 from brainflow.board_shim import BoardShim, BrainFlowInputParams, BoardIds
+from scipy.ndimage import gaussian_filter1d
     
     
 class SmallBrainGraph:
@@ -66,19 +67,19 @@ class SmallBrainGraph:
         return adj, D, L, lrw
 
         
-    def signal_smoothness(self, signals, type='diriclet'):
-    """
-    Parameters:
-    - signals (np.array): Matrix of signal values with rows as individual signals.
-    - type (str): 'dirichlet' for Dirichlet energy, 'tvg' for total variation.
-    """
+    def signal_smoothness(self, signals, metric='diriclet'):
+        """
+        Parameters:
+        - signals (np.array): Matrix of signal values with rows as individual signals.
+        - type (str): 'dirichlet' for Dirichlet energy, 'tvg' for total variation.
+        """
         # dirichlet energy
-        if type == 'dirichlet':
-            smoothness_values = signals.T @ self.L @ signals
+        if metric == 'dirichlet':
+            smoothness_values = signals.T * (self.L @ signals)
             avg_smoothness = smoothness_values.mean()
             return avg_smoothness
         # total variation of a graph signal
-        elif type == 'tvg':
+        elif metric == 'tvg':
             variation_values = []
             for signal in signals:
                 TV_g = 0
@@ -92,14 +93,14 @@ class SmallBrainGraph:
             return avg_smoothness
 
     
-def calculate_alpha_power(data, board_id, normalize='betaalpha'):
+def get_alpha_power(signals, board_id, normalize='betaalpha'):
     """
     Parameters:
      - normalize: {'max', 'norm', 'betaalpha'} How to normalize the alpha powers. 'max' uses the maximum FFT value,
        'norm' uses the vector norm, and 'betaalpha' returns the ratio of raw beta power to raw alpha power.
     """
-    ps = np.abs(np.fft.fft(data, axis=1))**2
-    freqs = np.fft.fftfreq(data.shape[1], 1 / BoardShim.get_sampling_rate(board_id))
+    ps = np.abs(np.fft.fft(signals, axis=1))**2
+    freqs = np.fft.fftfreq(signals.shape[1], 1 / BoardShim.get_sampling_rate(board_id))
     
     alpha_range = (freqs >= 8) & (freqs <= 12)
     alpha_powers = np.sum(ps[:, alpha_range], axis=1)
@@ -119,24 +120,9 @@ def calculate_alpha_power(data, board_id, normalize='betaalpha'):
         return beta_alpha_ratio
     else:
         raise ValueError("the normalize parameter must be 'max', 'norm', or 'betaalpha'")
-    
-    
-def parse_arguments():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--duration', type=int, default=120, help='Total duration to collect data, in seconds.')
-    parser.add_argument('--epoch_duration', type=float, default=1, help='Duration of an instance of data collection')
-    parser.add_argument('--port1', type=str, default='/dev/cu.usbserial-DM01HWJ7', help='Absolute path of Open BCI dongle 1 (usually in /dev/).')
-    parser.add_argument('--port2', type=str, default='/dev/cu.usbserial-DM01IK21', help='Absolute path of OpenBCI dongle 2 (usually in /dev/).')
-    parser.add_argument('--add_sound', type=bool, default=False, help='Whether to add sonification to the game')
-    parser.add_argument('--stressful_feedback_path', type=str, default='', help='Absolute path to the audio file containing stressful feedback')
-    parser.add_argument('--width', type=int, default=1440, help='Width of the Pygame window.')
-    parser.add_argument('--height', type=int, default=800, help='Height of the Pygame window.')
-    parser.add_argument('--font_size', type=int, default=36, help='Font size for text in the Pygame window.')
-    parser.add_argument('--game_type', type=str, default='alpha_war', help='The type of game to launch. Options are "alpha_war" and "brain_war".')
-    return parser.parse_args()
 
 
-def initialize_pygame(width, height, font_size):
+def init_pygame(width, height, font_size):
     pygame.init()  
     pygame.font.init()
     font = pygame.font.Font(None, font_size)
@@ -145,7 +131,7 @@ def initialize_pygame(width, height, font_size):
     return font, screen
     
     
-def initialize_board(serial_port, board_id):
+def init_board(serial_port, board_id):
     params = BrainFlowInputParams()
     params.serial_port = serial_port
     board = None
@@ -157,6 +143,20 @@ def initialize_board(serial_port, board_id):
         print(f"Couldn't initialize the board on port {serial_port}. Error: {e}")
     return board
 
+
+def get_dom_freq(signals, board_id):
+    """
+    For future SSVEP use
+    Calculate the dominant frequency across all signals in an array.
+    """
+    ps = np.abs(np.fft.fft(signals, axis=1))**2
+    total_ps = np.sum(ps, axis=0)
+    smooth_ps = gaussian_filter1d(total_ps, sigma=0.5)
+    freqs = np.fft.fftfreq(signals.shape[1], 1 / BoardShim.get_sampling_rate(board_id))
+    idx_max_power = np.argmax(smooth_ps)
+    dom_freq = freqs[idx_max_power]
+    return dom_freq
+    
 
 def alpha_war(board1, board2, screen, font, epoch_duration):
     speed = 30
@@ -189,7 +189,8 @@ def alpha_war(board1, board2, screen, font, epoch_duration):
             elif keys[pygame.K_d]:
                 rope.move_ip(speed, 0)
 
-        if not (board1 is None and board2 is None):
+        if board1 is not None and board2 is not None:
+            data1 = data2 = None
             try:
                 data1 = np.hstack((data1_old, board1.get_board_data()[1:9, :])) if board1 else data1_old
                 data2 = np.hstack((data2_old, board2.get_board_data()[1:9, :])) if board2 else data2_old
@@ -205,9 +206,9 @@ def alpha_war(board1, board2, screen, font, epoch_duration):
             except Exception as e:
                 print(f"Couldn't read data due to {e}")
 
-            if data1.size and data2.size:
-                alpha_power1 = calculate_alpha_power(data1, board_id1) if data1.size else 0
-                alpha_power2 = calculate_alpha_power(data2, board_id2) if data2.size else 0
+            if data1 is not None and data2 is not None and data1.size and data2.size:
+                alpha_power1 = get_alpha_power(data1, board_id1) if data1.size else 0
+                alpha_power2 = get_alpha_power(data2, board_id2) if data2.size else 0
 
                 diff = alpha_power2 - alpha_power1
                 diff = 2 / (1 + np.exp(-15*diff)) - 1
@@ -259,31 +260,51 @@ def network_war():
     pass
 
 
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--duration', type=int, default=120, help='Total duration to collect data, in seconds.')
+    parser.add_argument('--epoch_duration', type=float, default=1, help='Duration of an instance of data collection')
+    parser.add_argument('--port1', type=str, default='/dev/cu.usbserial-DM01HWJ7', help='Absolute path of Open BCI dongle 1 (usually in /dev/).')
+    parser.add_argument('--port2', type=str, default='/dev/cu.usbserial-DM01IK21', help='Absolute path of OpenBCI dongle 2 (usually in /dev/).')
+    parser.add_argument('--add_sound', type=bool, default=False, help='Whether to add sonification to the game')
+    parser.add_argument('--stressful_feedback_path', type=str, default='', help='Absolute path to the audio file containing stressful feedback')
+    parser.add_argument('--width', type=int, default=1440, help='Width of the Pygame window.')
+    parser.add_argument('--height', type=int, default=800, help='Height of the Pygame window.')
+    parser.add_argument('--font_size', type=int, default=36, help='Font size for text in the Pygame window.')
+    parser.add_argument('--game_type', type=str, default='alpha_war', help='The type of game to launch. Options are "alpha_war" and "brain_war".')
+    return parser.parse_args()
+
+
 def main():
-    try:
-        args = parse_arguments()
-        font, screen = initialize_pygame(args.width, args.height, args.font_size)
-        
-        board1 = initialize_board(args.port1, BoardIds.CYTON_BOARD.value)
-        board2 = initialize_board(args.port2, BoardIds.CYTON_BOARD.value)
-        
-        if args.game_type == 'alpha_war':
-            alpha_war(board1, board2, screen, font, args.epoch_duration) 
-        elif args.game_type == 'network_war':
-            network_war()
-        else:
-            raise ValueError (f"The specified game type, {args.game_type} is not one of the defined game types")
+    args = parse_args()
+    font, screen = init_pygame(args.width, args.height, args.font_size)
     
-    except Exception as e:
-        print(f"An error occurred: {e}", file=sys.stderr) 
+    board1 = init_board(args.port1, BoardIds.CYTON_BOARD.value)
+    board2 = init_board(args.port2, BoardIds.CYTON_BOARD.value)
     
-    finally:
-        if 'board1' in locals() and board1 is not None:
+    if args.game_type == 'alpha_war':
+        alpha_war(board1, board2, screen, font, args.epoch_duration) 
+    elif args.game_type == 'network_war':
+        network_war()
+    else:
+        raise ValueError (f"The specified game type, {args.game_type} is not one of the defined game types")
+
+    if 'board1' in locals() and board1 is not None:
+        try:
             board1.stop_stream()
             board1.release_session()
-        if 'board2' in locals() and board2 is not None:
+        except Exception as e:
+            print(type(board1), e)
+        # board1.stop_stream()
+        # board1.release_session()
+    if 'board2' in locals() and board2 is not None:
+        try:
             board2.stop_stream()
             board2.release_session()
+        except Exception as e:
+            print(type(board2), e)
+        # board2.stop_stream()
+        # board2.release_session()
         pygame.quit()
 
 

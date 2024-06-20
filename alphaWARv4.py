@@ -10,6 +10,41 @@ sys.stdout = original_stdout
 import numpy as np
 import matplotlib.pyplot as plt
 from brainflow.board_shim import BoardShim, BrainFlowInputParams, BoardIds
+import pygame.mixer
+
+# Initialize Pygame mixer
+pygame.mixer.init(frequency=20, size=-16, channels=2)
+ 
+def generate_sine_wave(frequency, duration=0.5, volume=0.5, sample_rate=256):
+    t = np.linspace(0, duration, int(sample_rate * duration), False)
+    wave = volume * np.sin(2 * np.pi * frequency * t)
+    return wave.astype(np.float32)
+ 
+def generate_sawtooth_wave(frequency, duration=0.5, volume=0.5, sample_rate=256):
+    t = np.linspace(0, duration, int(sample_rate * duration), False)
+    wave = volume * 2 * (t * frequency - np.floor(1/2 + t * frequency))
+    return wave.astype(np.float32)
+ 
+def play_sound_for_rope_position(rope_position):
+    frequency = 440 + 10 * abs(rope_position)**3  # Base frequency plus a factor of the rope position
+    if rope_position > 0:
+        waveform = generate_sine_wave(frequency)
+    else:
+        waveform = generate_sawtooth_wave(frequency)
+    sound = pygame.sndarray.make_sound(waveform.repeat(2).reshape((-1, 2)).copy(order='C'))
+    sound.play()
+# load the sounds
+buzzer_sound = pygame.mixer.Sound('buzzer.wav')
+def play_buzzer_sound():
+    pygame.mixer.Sound.play(buzzer_sound)
+
+bell_sound = pygame.mixer.Sound('bell.wav')
+def play_bell_sound():
+    pygame.mixer.Sound.play(bell_sound)
+
+winner_sound = pygame.mixer.Sound('winner.wav')
+def play_winner_sound():
+    pygame.mixer.Sound.play(winner_sound)
     
     
 def calculate_alpha_power(data, board_id, normalize='max'):
@@ -46,8 +81,8 @@ def parse_arguments():
     parser = argparse.ArgumentParser()
     parser.add_argument('--duration', type=int, default=120, help='Total duration to collect data, in seconds.')
     parser.add_argument('--epoch_duration', type=float, default=1, help='Duration of an instance of data collection')
-    parser.add_argument('--port1', type=str, default='/dev/cu.usbserial-DM01HWJ7', help='Absolute path of Open BCI dongle 1 (usually in /dev/).')
-    parser.add_argument('--port2', type=str, default='/dev/cu.usbserial-DM01IK21', help='Absolute path of OpenBCI dongle 2 (usually in /dev/).')
+    parser.add_argument('--port1', type=str, default='/dev/cu.usbserial-DM01HOSQ', help='Absolute path of Open BCI dongle 1 (usually in /dev/).')
+    parser.add_argument('--port2', type=str, default='/dev/cu.usbserial-DQ00859S', help='Absolute path of OpenBCI dongle 2 (usually in /dev/).')
     parser.add_argument('--add_sound', type=bool, default=False, help='Whether to add sonification to the game')
     parser.add_argument('--stressful_feedback_path', type=str, default='', help='Absolute path to the audio file containing stressful feedback')
     parser.add_argument('--width', type=int, default=1440, help='Width of the Pygame window.')
@@ -79,6 +114,8 @@ def initialize_board(serial_port, board_id):
 
 
 def game_loop(board1, board2, screen, font, epoch_duration):
+
+
     speed = 30
     rope_width = 250
     rope_height = 10
@@ -111,6 +148,7 @@ def game_loop(board1, board2, screen, font, epoch_duration):
 
         if not (board1 is None and board2 is None):
             try:
+                data1_old, data2_old = data1, data2
                 data1 = np.hstack((data1_old, board1.get_board_data()[1:9, :])) if board1 else data1_old
                 data2 = np.hstack((data2_old, board2.get_board_data()[1:9, :])) if board2 else data2_old
 
@@ -142,12 +180,21 @@ def game_loop(board1, board2, screen, font, epoch_duration):
                 pygame.draw.rect(screen, (0, 0, 0), rope)
                 pygame.draw.rect(screen, (255, 0, 0), player1)
                 pygame.draw.rect(screen, (0, 0, 255), player2)
+
                 
-                if rope.right < player1.left or rope.left > player2.right:
-                    if rope.right < player1.left:
-                        winner = 'Player 1'
-                    elif rope.left > player2.right:
-                        winner = 'Player 2'
+                play_sound_for_rope_position((rope.left + rope.right)/2)
+
+                
+                # Check if the rope has completely passed one of the player markers
+                # Determine the winner.
+                if rope.right <= player1.left:
+                    winner = 'Player 1'
+                    play_winner_sound()
+                elif rope.left >= player2.right:
+                    winner = 'Player 2'
+                    play_winner_sound()
+                if winner:
+                    play_winner_sound()
                     
                     pygame.display.flip()
                     text = font.render(f'Game Over! {winner} is the winner.', True, (0, 0, 0))
@@ -181,10 +228,6 @@ def main():
         
         game_loop(board1, board2, screen, font, args.epoch_duration) 
     
-    except Exception as e:
-        print(f"An error occurred: {e}", file=sys.stderr) 
-    
-    finally:
         if 'board1' in locals() and board1 is not None:
             board1.stop_stream()
             board1.release_session()
@@ -193,6 +236,8 @@ def main():
             board2.release_session()
         pygame.quit()
 
+    except Exception as e:
+        print(f"An error occurred: {e}", file=sys.stderr) 
 
 if __name__ == '__main__':
     main()

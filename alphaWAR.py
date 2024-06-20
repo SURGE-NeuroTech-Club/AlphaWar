@@ -3,9 +3,33 @@ import pygame
 import sys
 import pygame.font
 import argparse
+import pygame.mixer
 import numpy as np
 import matplotlib.pyplot as plt
 from brainflow.board_shim import BoardShim, BrainFlowInputParams, BoardIds
+
+pygame.init()
+# Initialize Pygame mixer
+pygame.mixer.init(frequency=20, size=-16, channels=2)
+ 
+def generate_sine_wave(frequency, duration=0.5, volume=0.5, sample_rate=44100):
+    t = np.linspace(0, duration, int(sample_rate * duration), False)
+    wave = volume * np.sin(2 * np.pi * frequency * t)
+    return wave.astype(np.float32)
+ 
+def generate_sawtooth_wave(frequency, duration=0.5, volume=0.5, sample_rate=44100):
+    t = np.linspace(0, duration, int(sample_rate * duration), False)
+    wave = volume * 2 * (t * frequency - np.floor(1/2 + t * frequency))
+    return wave.astype(np.float32)
+ 
+def play_sound_for_rope_position(rope_position):
+    frequency = 100 + 10 * abs(rope_position)**3      # Base frequency plus a factor of the rope position
+    if rope_position > 0:
+        waveform = generate_sine_wave(frequency)
+    else:
+        waveform = generate_sawtooth_wave(frequency)
+    sound = pygame.sndarray.make_sound(waveform.repeat(2).reshape((-1, 2)).copy(order='C'))
+    sound.play()
 
 def plot_powers(freqs, ps, alpha_power):
     """
@@ -61,8 +85,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--duration', type=int, default=120, help='Total duration to collect data, in seconds.')
     parser.add_argument('--epoch_duration', type=float, default=1, help='Duration of an instance of data collection')
-    parser.add_argument('--port1', type=str, default='/dev/cu.usbserial-DM01HZK9', help='Path of dongle 1 in /dev/.')
-    parser.add_argument('--port2', type=str, default='/dev/cu.usbserial-DQ00859S', help='Path of dongle 2 in /dev/.')
+    parser.add_argument('--port1', type=str, default='/dev/cu.usbserial-DM01IK21', help='Absolute path of Open BCI dongle 1 (usually in /dev/).')
+    parser.add_argument('--port2', type=str, default='/dev/cu.usbserial-DQ00859S', help='Absolute path of OpenBCI dongle 2 (usually in /dev/).')
     args = parser.parse_args()
     duration = args.duration 
     epoch_duration = args.epoch_duration
@@ -177,6 +201,8 @@ def main():
                 pygame.draw.rect(screen, (0, 0, 0), rope)
                 pygame.draw.rect(screen, (255, 0, 0), player1)
                 pygame.draw.rect(screen, (0, 0, 255), player2)
+
+                play_sound_for_rope_position((rope.left + rope.right)/2)
 
                 # Check if the rope has completely passed one of the player markers
                 if rope.right < player1.left or rope.left > player2.right:
