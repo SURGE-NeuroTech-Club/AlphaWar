@@ -86,7 +86,7 @@ def main():
     parser.add_argument('--duration', type=int, default=120, help='Total duration to collect data, in seconds.')
     parser.add_argument('--epoch_duration', type=float, default=1, help='Duration of an instance of data collection')
     parser.add_argument('--port1', type=str, default='/dev/cu.usbserial-DM01IK21', help='Absolute path of Open BCI dongle 1 (usually in /dev/).')
-    parser.add_argument('--port2', type=str, default='/dev/cu.usbserial-DQ00859S', help='Absolute path of OpenBCI dongle 2 (usually in /dev/).')
+    parser.add_argument('--port2', type=str, default='/dev/cu.usbserial-DM01HWJ7', help='Absolute path of OpenBCI dongle 2 (usually in /dev/).')
     args = parser.parse_args()
     duration = args.duration 
     epoch_duration = args.epoch_duration
