@@ -158,7 +158,7 @@ def get_dom_freq(signals, board_id):
     return dom_freq
     
 
-def alpha_war(board1, board2, screen, font, epoch_duration):
+def alpha_war(board1, board2, screen, font, epoch_duration, board_id1, board_id2):
     speed = 30
     rope_width = 250
     rope_height = 10
@@ -189,11 +189,18 @@ def alpha_war(board1, board2, screen, font, epoch_duration):
             elif keys[pygame.K_d]:
                 rope.move_ip(speed, 0)
 
+
         if board1 is not None and board2 is not None:
             data1 = data2 = None
             try:
-                data1 = np.hstack((data1_old, board1.get_board_data()[1:9, :])) if board1 else data1_old
-                data2 = np.hstack((data2_old, board2.get_board_data()[1:9, :])) if board2 else data2_old
+                if 'data1_old' in locals() and 'data2_old' in locals(): 
+                    data1 = np.hstack((data1_old, board1.get_board_data()[1:9, :])) if board1 else data1_old
+                    data2 = np.hstack((data2_old, board2.get_board_data()[1:9, :])) if board2 else data2_old
+                else:
+                    data1 = board1.get_board_data()[1:9, :] 
+                    data2 = board2.get_board_data()[1:9, :] 
+                    data1_old = data1
+                    data2_old = data2   
 
                 if data1.shape[1] > 256:
                     data1 = data1[:, -256:]
@@ -235,7 +242,9 @@ def alpha_war(board1, board2, screen, font, epoch_duration):
                     screen.blit(text, (200, 200)) 
                     text2 = font.render('Press space to play again or escape to quit.', True, (0, 0, 0))
                     screen.blit(text2, (200, 250))
-
+            else: 
+                print("Couldn't read data...")
+                
         pygame.display.flip()  
         game_over = True
         
@@ -264,7 +273,7 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--duration', type=int, default=120, help='Total duration to collect data, in seconds.')
     parser.add_argument('--epoch_duration', type=float, default=1, help='Duration of an instance of data collection')
-    parser.add_argument('--port1', type=str, default='/dev/cu.usbserial-DM01HWJ7', help='Absolute path of Open BCI dongle 1 (usually in /dev/).')
+    parser.add_argument('--port1', type=str, default='/dev/cu.usbserial-DQ00859S', help='Absolute path of Open BCI dongle 1 (usually in /dev/).')
     parser.add_argument('--port2', type=str, default='/dev/cu.usbserial-DM01IK21', help='Absolute path of OpenBCI dongle 2 (usually in /dev/).')
     parser.add_argument('--add_sound', type=bool, default=False, help='Whether to add sonification to the game')
     parser.add_argument('--stressful_feedback_path', type=str, default='', help='Absolute path to the audio file containing stressful feedback')
@@ -279,11 +288,13 @@ def main():
     args = parse_args()
     font, screen = init_pygame(args.width, args.height, args.font_size)
     
-    board1 = init_board(args.port1, BoardIds.CYTON_BOARD.value)
-    board2 = init_board(args.port2, BoardIds.CYTON_BOARD.value)
+    board_id1 = BoardIds.CYTON_BOARD.value
+    board1 = init_board(args.port1, board_id1)
+    board_id2 = BoardIds.CYTON_BOARD.value
+    board2 = init_board(args.port2, board_id2)
     
     if args.game_type == 'alpha_war':
-        alpha_war(board1, board2, screen, font, args.epoch_duration) 
+        alpha_war(board1, board2, screen, font, args.epoch_duration, board_id1, board_id2) 
     elif args.game_type == 'network_war':
         network_war()
     else:
