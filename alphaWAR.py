@@ -93,21 +93,10 @@ def main():
     port1 = args.port1
     port2 = args.port2
 
-    # # Location of the 'rope'
-    # location = 0
-    # # The amount by which to move the 'rope' to win
-    # threshold = 10
-
-
     # Set the font
     pygame.font.init()
     font = pygame.font.Font(None, 36)
     winner = ''
-
-    # pygame.mixer.init()
-    # Load the MP3 file
-    # pygame.mixer.music.load('/Users/Kya_Masoumi/git/myGitHub/BCI-hack/Dalhousie University 2.m4a')
-    # Set the window size
     width, height = 1440, 800
     rope_width = 250
     rope_height = 10
@@ -172,30 +161,15 @@ def main():
                 alpha_power1 = calculate_alpha_power(data1, board_id1)
                 alpha_power2 = calculate_alpha_power(data2, board_id2)
 
-                # 1 if 2>1, -1 if 1>2
-                # Could be set to some other function of the difference to move the rope by varying amounts
                 diff = int(alpha_power2 > alpha_power1) * 2 - 1
                 diff = round(diff, 3)
                 print(diff, alpha_power1, alpha_power2)
 
-                # # Modify rope_control based on input_var
-                # if diff < 0:
-                #     rope_control = -1
-                # elif diff > 0:
-                #     rope_control = 1
-                # else:
-                #     rope_control = 0
-                # game logic
                 rope.move_ip(diff * speed, 0)
                     #time.sleep(0.02)
 
                 pygame.display.flip()
         
-                # # Check if the rope is within 200 pixels of the finish lines
-                # if abs(rope.right - player1.left) <= 200 or abs(rope.left - player2.right) <= 200:
-                #     # Play the MP3 file
-                #     pygame.mixer.music.play()
-
                 # drawing
                 screen.fill((255, 255, 255))
                 pygame.draw.rect(screen, (0, 0, 0), rope)
