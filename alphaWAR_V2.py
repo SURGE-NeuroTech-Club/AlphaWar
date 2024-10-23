@@ -6,6 +6,7 @@ import argparse
 import pygame.mixer
 import numpy as np
 import matplotlib.pyplot as plt
+from brainflow_stream import *
 from brainflow.board_shim import BoardShim, BrainFlowInputParams, BoardIds
 
 pygame.init()
@@ -78,21 +79,13 @@ def calculate_alpha_power(data, board_id, normalize='betaalpha'):
     else:
         raise ValueError("the normalize parameter must be 'max', 'norm', or 'betaalpha'")
     
- # Initialize Pygame
+# Initialize Pygame
+board_id1 = BoardIds.CYTON_BOARD.value
+board_id2 = BoardIds.CYTON_BOARD.value
+epoch_duration = 1
+
 pygame.init()
 def main(): 
-    #usb_ids =  
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--duration', type=int, default=120, help='Total duration to collect data, in seconds.')
-    parser.add_argument('--epoch_duration', type=float, default=1, help='Duration of an instance of data collection')
-    parser.add_argument('--port1', type=str, default='/dev/cu.usbserial-DM01IK21', help='Absolute path of Open BCI dongle 1 (usually in /dev/).')
-    parser.add_argument('--port2', type=str, default='/dev/cu.usbserial-DM01HWJ7', help='Absolute path of OpenBCI dongle 2 (usually in /dev/).')
-    args = parser.parse_args()
-    duration = args.duration 
-    epoch_duration = args.epoch_duration
-    port1 = args.port1
-    port2 = args.port2
-
     # Set the font
     pygame.font.init()
     font = pygame.font.Font(None, 36)
@@ -107,24 +100,16 @@ def main():
     # set up the players and the rope
     player1 = pygame.Rect(100, 250, 10, 300)
     player2 = pygame.Rect(1340, 250, 10, 300)
-
-    params1 = BrainFlowInputParams()
-    params1.serial_port = port1
-    board_id1 = BoardIds.CYTON_BOARD.value
-    BoardShim.enable_dev_board_logger()
-    board1 = BoardShim(board_id1, params1)
-    time.sleep(3)
-    params2 = BrainFlowInputParams()
-    params2.serial_port = port2
-    board_id2 = BoardIds.CYTON_BOARD.value
-    BoardShim.enable_dev_board_logger()
-    board2 = BoardShim(board_id2, params2)
-    print('both boards initialized')
-    board1.prepare_session()
-    board2.prepare_session()
-
-    board1.start_stream()
-    board2.start_stream()
+    
+    board1 = BrainFlowBoardSetup(board_id= board_id1,
+                                 name='Player 1')
+    
+    board2 = BrainFlowBoardSetup(board_id= board_id2,
+                                 name='Player 2')
+    
+    board1.setup()
+    board2.setup()
+    
     print('Collecting data...')
 
     # game loop
@@ -176,7 +161,7 @@ def main():
                 pygame.draw.rect(screen, (255, 0, 0), player1)
                 pygame.draw.rect(screen, (0, 0, 255), player2)
 
-                play_sound_for_rope_position((rope.left + rope.right)/2)
+                # play_sound_for_rope_position((rope.left + rope.right)/2)
 
                 # Check if the rope has completely passed one of the player markers
                 if rope.right < player1.left or rope.left > player2.right:
@@ -212,11 +197,8 @@ def main():
                     elif event.key == pygame.K_SPACE:
                         game_over = False
 
-    board1.stop_stream()
-    board1.release_session()
-
-    board2.stop_stream()
-    board2.release_session()
+    board1.stop()
+    board2.stop()
 
     pygame.quit()
 
