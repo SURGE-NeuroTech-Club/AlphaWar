@@ -90,7 +90,7 @@ def main():
     pygame.font.init()
     font = pygame.font.Font(None, 36)
     winner = ''
-    width, height = 1440, 800
+    width, height = 1440, 800 #2560, 1440 
     rope_width = 250
     rope_height = 10
 
@@ -102,10 +102,14 @@ def main():
     player2 = pygame.Rect(1340, 250, 10, 300)
     
     board1 = BrainFlowBoardSetup(board_id= board_id1,
-                                 name='Player 1')
+                                 name='Player 1',
+                                 serial_port='COM9'
+                                 )
     
     board2 = BrainFlowBoardSetup(board_id= board_id2,
-                                 name='Player 2')
+                                 name='Player 2',
+                                 serial_port='COM4'
+                                 )
     
     board1.setup()
     board2.setup()
