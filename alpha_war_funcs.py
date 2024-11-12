@@ -1,7 +1,20 @@
 import brainflow
 from brainflow.board_shim import BoardShim, BrainFlowInputParams, BrainFlowError, BoardIds
 import serial.tools.list_ports
+import time
+import pygame
+import sys
+import pygame.font
+import argparse
+import pygame.mixer
+import numpy as np
+import matplotlib.pyplot as plt
+from alpha_war_funcs import *
+from brainflow.board_shim import BoardShim, BrainFlowInputParams, BoardIds
 
+###################
+# This file holds the BrainFlowBoardSetup class, which is a wrapper around the BrainFlow BoardShim class. As well as other functions necessary for Alpha-war to work properly.
+###################
 class BrainFlowBoardSetup:
     """
     A class to manage the setup and control of a BrainFlow board.
@@ -217,6 +230,15 @@ class BrainFlowBoardSetup:
             print(f"Board is not set up.")
             return None
         
+    def get_board_name(self):
+        """
+        Prints the name of the BrainFlow board.
+
+        This method prints the name of the board, which can be useful for logging
+        or display purposes.
+        """
+        return self.name
+        
     def get_current_board_data(self, num_samples):
         """
         Retrieves the most recent `num_samples` data from the BrainFlow board. - Does not remove data from ringbuffer
@@ -289,17 +311,89 @@ class BrainFlowBoardSetup:
         self.stop()
 
 
+ 
+def generate_sine_wave(frequency, duration=0.5, volume=0.5, sample_rate=44100):
+    t = np.linspace(0, duration, int(sample_rate * duration), False)
+    wave = volume * np.sin(2 * np.pi * frequency * t)
+    return wave.astype(np.float32)
+ 
+def generate_sawtooth_wave(frequency, duration=0.5, volume=0.5, sample_rate=44100):
+    t = np.linspace(0, duration, int(sample_rate * duration), False)
+    wave = volume * 2 * (t * frequency - np.floor(1/2 + t * frequency))
+    return wave.astype(np.float32)
+ 
+def play_sound_for_rope_position(rope_position):
+    frequency = 100 + 10 * abs(rope_position)**3      # Base frequency plus a factor of the rope position
+    if rope_position > 0:
+        waveform = generate_sine_wave(frequency)
+    else:
+        waveform = generate_sawtooth_wave(frequency)
+    sound = pygame.sndarray.make_sound(waveform.repeat(2).reshape((-1, 2)).copy(order='C'))
+    sound.play()
+
+def plot_powers(freqs, ps, alpha_power):
+    """
+    Parameters
+     - freqs:
+     - ps: 
+    """
+    fig, axs = plt.subplots(2, 4, figsize=(20, 10))
+    for i, ax in enumerate(axs.flatten()):
+        ax.plot(freqs[:len(freqs) // 2], ps[:len(ps) // 2])  
+        ax.set_title(f'Channel {i+1} (Alpha Power: {alpha_power:.2f})')
+        ax.set_xlabel('Frequency (Hz)')
+        ax.set_ylabel('Power')
+
+    plt.tight_layout()
+    plt.show()
+
+
+
+def calculate_alpha_power(data, board_id, normalize='betaalpha'):
+    """
+    Parameters:
+     - normalize: {'max', 'norm', 'betaalpha'} How to normalize the alpha powers. 'max' uses the maximum FFT value,
+       'norm' uses the vector norm, and 'betaalpha' returns the ratio of raw beta power to raw alpha power.
+    """
+    ps = np.abs(np.fft.fft(data, axis=1))**2
+    freqs = np.fft.fftfreq(data.shape[1], 1 / BoardShim.get_sampling_rate(board_id))
+    
+    alpha_range = (freqs >= 8) & (freqs <= 12)
+    beta_range = (freqs > 12) & (freqs <= 30)
+    
+    alpha_powers = np.sum(ps[:, alpha_range], axis=1)
+    
+    if normalize == 'max':
+        normalization_factor = np.max(ps, axis=1)
+        normalized_alpha_powers = alpha_powers / normalization_factor
+        return np.sum(normalized_alpha_powers)
+    elif normalize == 'norm':
+        normalization_factor = norm(ps, axis=1)
+        normalized_alpha_powers = alpha_powers / normalization_factor
+        return np.sum(normalized_alpha_powers)
+    elif normalize == 'betaalpha':
+        beta_powers = np.sum(ps[:, beta_range], axis=1)
+        beta_alpha_ratio = np.sum(beta_powers) / np.sum(alpha_powers)
+        return beta_alpha_ratio
+    else:
+        raise ValueError("the normalize parameter must be 'max', 'norm', or 'betaalpha'")
+
 #######
 # Example streaming from a single board
 ######
 if __name__ == "__main__":
     import time
 
-    board_id_cyton = BoardIds.CYTON_BOARD.value
+    board_id_cyton = BoardIds.SYNTHETIC_BOARD.value #BoardIds.CYTON_BOARD.value
 
-    brainflow_board = BrainFlowBoardSetup(board_id=board_id_cyton)
+    brainflow_board = BrainFlowBoardSetup(board_id=board_id_cyton,
+                                          name='TestName',
+                                          serial_port='COM9'
+                                          )
 
     brainflow_board.setup()
+    
+    print(brainflow_board.get_board_name())
 
     # Stream from both boards for 5 seconds
     time.sleep(5)
