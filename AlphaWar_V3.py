@@ -9,25 +9,26 @@ import matplotlib.pyplot as plt
 from alpha_war_funcs import *
 from brainflow.board_shim import BoardShim, BrainFlowInputParams, BoardIds
 
-pygame.init()
-# Initialize Pygame mixer
-pygame.mixer.init(frequency=20, size=-16, channels=2)
-    
-# Initialize Pygame
-player_1_board_id = BoardIds.SYNTHETIC_BOARD.value #BoardIds.CYTON_BOARD.value
+# Set the board IDs and serial ports for the players
+player_1_board_id = BoardIds.CYTON_BOARD.value # BoardIds.SYNTHETIC_BOARD.value
 player_1_serial_port = 'COM4'
 
-player_2_board_id = BoardIds.SYNTHETIC_BOARD.value #BoardIds.CYTON_BOARD.value
+player_2_board_id = BoardIds.CYTON_BOARD.value # BoardIds.SYNTHETIC_BOARD.value
 player_2_serial_port = 'COM9'
 
 # Set the duration of each epoch in seconds
 epoch_duration = 2
 
-alpha_normalization = 'betaalpha'  # {'max', 'norm', 'betaalpha'}: Method for normalizing alpha power.
-
+# Method for normalizing alpha power.
+alpha_normalization = 'betaalpha'  
 # - 'max': Returns the sum of alpha power across channels, with each channel's alpha power normalized by the channel's maximum FFT power.
 # - 'norm': Returns the sum of alpha power across channels, with each channel's alpha power normalized by the vector norm of its power spectrum.
 # - 'betaalpha': Returns the ratio of total beta power (12-30 Hz) to total alpha power (8-12 Hz) across all channels.
+
+
+pygame.init()
+# Initialize Pygame mixer
+pygame.mixer.init(frequency=20, size=-16, channels=2)
 
 def main(): 
     # Set the font
