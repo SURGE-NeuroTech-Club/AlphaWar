@@ -20,45 +20,14 @@ player_1_serial_port = 'COM4'
 player_2_board_id = BoardIds.SYNTHETIC_BOARD.value #BoardIds.CYTON_BOARD.value
 player_2_serial_port = 'COM9'
 
-epoch_duration = 1
-import time
-import pygame
-import numpy as np
-from alpha_war_funcs import *
-from brainflow.board_shim import BoardShim, BrainFlowInputParams, BoardIds
+# Set the duration of each epoch in seconds
+epoch_duration = 2
 
-pygame.init()
-# Initialize Pygame mixer
-pygame.mixer.init(frequency=20, size=-16, channels=2)
-import time
-import pygame
-import numpy as np
-from alpha_war_funcs import *
-from brainflow.board_shim import BoardShim, BrainFlowInputParams, BoardIds
+alpha_normalization = 'betaalpha'  # {'max', 'norm', 'betaalpha'}: Method for normalizing alpha power.
 
-pygame.init()
-# Initialize Pygame mixer
-pygame.mixer.init(frequency=20, size=-16, channels=2)
-import time
-import pygame
-import numpy as np
-from alpha_war_funcs import *
-from brainflow.board_shim import BoardShim, BrainFlowInputParams, BoardIds
-
-pygame.init()
-# Initialize Pygame mixer
-pygame.mixer.init(frequency=20, size=-16, channels=2)
-
-
-import time
-import pygame
-import numpy as np
-from alpha_war_funcs import *
-from brainflow.board_shim import BoardShim, BrainFlowInputParams, BoardIds
-
-pygame.init()
-# Initialize Pygame mixer
-pygame.mixer.init(frequency=20, size=-16, channels=2)
+# - 'max': Returns the sum of alpha power across channels, with each channel's alpha power normalized by the channel's maximum FFT power.
+# - 'norm': Returns the sum of alpha power across channels, with each channel's alpha power normalized by the vector norm of its power spectrum.
+# - 'betaalpha': Returns the ratio of total beta power (12-30 Hz) to total alpha power (8-12 Hz) across all channels.
 
 def main(): 
     # Set the font
@@ -84,7 +53,23 @@ def main():
     board1.setup()
     board2.setup()
     
-    time.sleep(2)
+    board1_srate = board1.get_sampling_rate()
+    board2_srate = board2.get_sampling_rate()
+    
+    samples_per_epoch1 = int(epoch_duration * board1_srate)
+    samples_per_epoch2 = int(epoch_duration * board2_srate)
+    
+    # Display initial message
+    init_message = label_font.render("Initializing, please wait...", True, (0, 0, 0))
+
+    # Display the message on the screen
+    screen.fill((255, 255, 255))
+    message_rect = init_message.get_rect(center=(screen.get_width() // 2, screen.get_height() // 2))
+    screen.blit(init_message, message_rect)
+    # screen.blit(init_message, (50, 50))  # Adjust (50, 50) to your preferred position
+    pygame.display.flip()  # Update the display to show the message
+    
+    time.sleep(epoch_duration + 1)
     print('Collecting data...')
 
     # Variables to track the average alpha power and history
@@ -114,15 +99,18 @@ def main():
                         quit_game = True
             pygame.display.flip()
             try:
-                data1 = board1.get_board_data()[1:9, :]   
-                data2 = board2.get_board_data()[1:9, :] 
+                # data1 = board1.get_board_data()[1:9, :]   
+                # data2 = board2.get_board_data()[1:9, :] 
+                data1 = board1.get_current_board_data(samples_per_epoch1)
+                data2 = board2.get_current_board_data(samples_per_epoch2)
+                print(data2.shape)
                 time.sleep(epoch_duration)  
             except:
                 print("Couldn't read data...")
 
             if data1.size and data2.size: 
-                alpha_power1 = calculate_alpha_power(data1, player_1_board_id)
-                alpha_power2 = calculate_alpha_power(data2, player_2_board_id)
+                alpha_power1 = calculate_alpha_power(data1, player_1_board_id, normalize=alpha_normalization)
+                alpha_power2 = calculate_alpha_power(data2, player_2_board_id, normalize=alpha_normalization)
 
                 # Update cumulative sum and count for averages
                 alpha_power1_sum += alpha_power1
@@ -168,10 +156,19 @@ def main():
 
                 # Check if we have enough data points to plot the graph
                 if len(alpha_history1) >= 2 and len(alpha_history2) >= 2:
-                    # Determine dynamic max_alpha and min_alpha based on data
-                    min_alpha = min(min(alpha_history1), min(alpha_history2)) - 5  # Minimum is 5 units below the lowest data point
-                    max_alpha = max(max(alpha_history1), max(alpha_history2)) * 1.1  # Add 10% buffer above the maximum data point
+                    
+                    # Determine dynamic max_alpha and min_alpha based on data, rounded to ensure integer values
+                    min_alpha = int(min(min(alpha_history1), min(alpha_history2)) - 2)
+                    # max_alpha = int(max(max(alpha_history1), max(alpha_history2)) * 1.1)  # Add 10% buffer above
+                    raw_max_alpha = max(max(alpha_history1), max(alpha_history2)) * 1.1  # Add 10% buffer above the maximum data point
+                    max_alpha = int(np.ceil(raw_max_alpha))  # Round up to the nearest integer
 
+
+                    # Ensure integer tick interval
+                    tick_interval = max(1, (max_alpha - min_alpha) // 4)  # Choose an interval to divide the range into 4 or more ticks
+
+                    max_alpha = min_alpha + (tick_interval * 4)
+                    
                     # Scale the points for each player's alpha power history
                     points1 = [(graph_x_start + i * (graph_width // history_length), graph_y_start + graph_height - int(((alpha - min_alpha) / (max_alpha - min_alpha)) * graph_height)) for i, alpha in enumerate(alpha_history1)]
                     points2 = [(graph_x_start + i * (graph_width // history_length), graph_y_start + graph_height - int(((alpha - min_alpha) / (max_alpha - min_alpha)) * graph_height)) for i, alpha in enumerate(alpha_history2)]
@@ -182,7 +179,8 @@ def main():
 
                     # Add y-axis labels and tick marks
                     for i in range(5):
-                        y_value = min_alpha + (max_alpha - min_alpha) * (i / 4)
+                        # y_value = min_alpha + (max_alpha - min_alpha) * (i / 4)
+                        y_value = min_alpha + (tick_interval * i)
                         y_position = graph_y_start + graph_height - int(((y_value - min_alpha) / (max_alpha - min_alpha)) * graph_height)
                         tick_label = label_font.render(f"{y_value:.1f}", True, (0, 0, 0))
                         screen.blit(tick_label, (graph_x_start - 40, y_position - tick_label.get_height() // 2))

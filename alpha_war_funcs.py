@@ -214,6 +214,17 @@ class BrainFlowBoardSetup:
         for key, value in vars(self.params).items():
             print(f"{key}: {value}")
 
+    def get_sampling_rate(self):
+        """
+        Retrieves the sampling rate of the BrainFlow board.
+
+        This method returns the sampling rate of the board, which can be useful for data processing.
+
+        Returns:
+            int: The sampling rate of the BrainFlow board.
+        """
+        return self.sampling_rate
+    
     def get_board_data(self):
         """
         Retrieves the current data from the BrainFlow board. - Removes data from ringbuffer
@@ -311,72 +322,62 @@ class BrainFlowBoardSetup:
         self.stop()
 
 
- 
-def generate_sine_wave(frequency, duration=0.5, volume=0.5, sample_rate=44100):
-    t = np.linspace(0, duration, int(sample_rate * duration), False)
-    wave = volume * np.sin(2 * np.pi * frequency * t)
-    return wave.astype(np.float32)
- 
-def generate_sawtooth_wave(frequency, duration=0.5, volume=0.5, sample_rate=44100):
-    t = np.linspace(0, duration, int(sample_rate * duration), False)
-    wave = volume * 2 * (t * frequency - np.floor(1/2 + t * frequency))
-    return wave.astype(np.float32)
- 
-def play_sound_for_rope_position(rope_position):
-    frequency = 100 + 10 * abs(rope_position)**3      # Base frequency plus a factor of the rope position
-    if rope_position > 0:
-        waveform = generate_sine_wave(frequency)
-    else:
-        waveform = generate_sawtooth_wave(frequency)
-    sound = pygame.sndarray.make_sound(waveform.repeat(2).reshape((-1, 2)).copy(order='C'))
-    sound.play()
-
-def plot_powers(freqs, ps, alpha_power):
-    """
-    Parameters
-     - freqs:
-     - ps: 
-    """
-    fig, axs = plt.subplots(2, 4, figsize=(20, 10))
-    for i, ax in enumerate(axs.flatten()):
-        ax.plot(freqs[:len(freqs) // 2], ps[:len(ps) // 2])  
-        ax.set_title(f'Channel {i+1} (Alpha Power: {alpha_power:.2f})')
-        ax.set_xlabel('Frequency (Hz)')
-        ax.set_ylabel('Power')
-
-    plt.tight_layout()
-    plt.show()
-
-
-
 def calculate_alpha_power(data, board_id, normalize='betaalpha'):
     """
+    Calculate the alpha power of EEG data with different normalization options.
+    
     Parameters:
-     - normalize: {'max', 'norm', 'betaalpha'} How to normalize the alpha powers. 'max' uses the maximum FFT value,
-       'norm' uses the vector norm, and 'betaalpha' returns the ratio of raw beta power to raw alpha power.
+    - data: numpy array, shape (n_channels, n_samples)
+        The EEG data where each row represents a channel and each column represents a sample.
+    - board_id: int
+        The board ID for getting the sampling rate using BoardShim.
+    - normalize: str, optional
+        Normalization method. Options are:
+        - 'max': Normalizes by the maximum FFT value for each channel.
+        - 'norm': Normalizes by the vector norm of the power spectrum for each channel.
+        - 'betaalpha': Returns the ratio of raw beta power (12-30 Hz) to raw alpha power (8-12 Hz).
+        
+    Returns:
+    - float: The calculated alpha power, normalized based on the specified method.
     """
+    # Compute the power spectrum for each channel
     ps = np.abs(np.fft.fft(data, axis=1))**2
     freqs = np.fft.fftfreq(data.shape[1], 1 / BoardShim.get_sampling_rate(board_id))
     
+    # Define the alpha and beta frequency ranges
     alpha_range = (freqs >= 8) & (freqs <= 12)
     beta_range = (freqs > 12) & (freqs <= 30)
     
+    # Calculate the alpha power for each channel by summing the power in the alpha band
     alpha_powers = np.sum(ps[:, alpha_range], axis=1)
     
+    # Normalization or ratio calculations based on the specified method
     if normalize == 'max':
+        # Normalize by the maximum FFT value per channel
         normalization_factor = np.max(ps, axis=1)
         normalized_alpha_powers = alpha_powers / normalization_factor
         return np.sum(normalized_alpha_powers)
+    
     elif normalize == 'norm':
-        normalization_factor = norm(ps, axis=1)
+        # Normalize by the vector norm of the power spectrum for each channel
+        normalization_factor = np.linalg.norm(ps, axis=1)
         normalized_alpha_powers = alpha_powers / normalization_factor
         return np.sum(normalized_alpha_powers)
+    
     elif normalize == 'betaalpha':
+        # Calculate the ratio of beta power to alpha power across all channels
         beta_powers = np.sum(ps[:, beta_range], axis=1)
-        beta_alpha_ratio = np.sum(beta_powers) / np.sum(alpha_powers)
+        total_alpha_power = np.sum(alpha_powers)
+        total_beta_power = np.sum(beta_powers)
+        
+        # Avoid division by zero
+        if total_alpha_power == 0:
+            return 0
+        beta_alpha_ratio = total_beta_power / total_alpha_power
         return beta_alpha_ratio
+    
     else:
-        raise ValueError("the normalize parameter must be 'max', 'norm', or 'betaalpha'")
+        raise ValueError("The normalize parameter must be 'max', 'norm', or 'betaalpha'")
 
 #######
 # Example streaming from a single board
@@ -394,6 +395,8 @@ if __name__ == "__main__":
     brainflow_board.setup()
     
     print(brainflow_board.get_board_name())
+    
+    print(brainflow_board.get_sampling_rate())
 
     # Stream from both boards for 5 seconds
     time.sleep(5)
