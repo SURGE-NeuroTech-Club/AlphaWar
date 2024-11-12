@@ -21,8 +21,34 @@ player_2_board_id = BoardIds.SYNTHETIC_BOARD.value #BoardIds.CYTON_BOARD.value
 player_2_serial_port = 'COM9'
 
 epoch_duration = 1
+import time
+import pygame
+import numpy as np
+from alpha_war_funcs import *
+from brainflow.board_shim import BoardShim, BrainFlowInputParams, BoardIds
 
 pygame.init()
+# Initialize Pygame mixer
+pygame.mixer.init(frequency=20, size=-16, channels=2)
+import time
+import pygame
+import numpy as np
+from alpha_war_funcs import *
+from brainflow.board_shim import BoardShim, BrainFlowInputParams, BoardIds
+
+pygame.init()
+# Initialize Pygame mixer
+pygame.mixer.init(frequency=20, size=-16, channels=2)
+import time
+import pygame
+import numpy as np
+from alpha_war_funcs import *
+from brainflow.board_shim import BoardShim, BrainFlowInputParams, BoardIds
+
+pygame.init()
+# Initialize Pygame mixer
+pygame.mixer.init(frequency=20, size=-16, channels=2)
+
 
 import time
 import pygame
@@ -39,6 +65,7 @@ def main():
     pygame.font.init()
     font = pygame.font.Font(None, 36)
     alpha_font = pygame.font.Font(None, 28)
+    label_font = pygame.font.Font(None, 24)
     winner = ''
     width, height = 1440, 800
     rope_width = 250
@@ -65,8 +92,8 @@ def main():
     alpha_power2_sum = 0.0
     count = 0
     history_length = 100  # Number of data points to display
-    alpha_history1 = [0] * history_length
-    alpha_history2 = [0] * history_length
+    alpha_history1 = []
+    alpha_history2 = []
 
     # Game loop
     quit_game = False
@@ -107,9 +134,10 @@ def main():
                 avg_alpha_power2 = alpha_power2_sum / count
 
                 # Update alpha power history
-                alpha_history1.pop(0)  # Remove the oldest value
-                alpha_history2.pop(0)
-                alpha_history1.append(alpha_power1)  # Add the new value
+                if len(alpha_history1) >= history_length:
+                    alpha_history1.pop(0)
+                    alpha_history2.pop(0)
+                alpha_history1.append(alpha_power1)
                 alpha_history2.append(alpha_power2)
 
                 # Rope movement based on alpha power difference
@@ -134,15 +162,47 @@ def main():
                 # Draw background for the graph
                 pygame.draw.rect(screen, (230, 230, 230), (graph_x_start, graph_y_start, graph_width, graph_height))
 
-                # Scaling for the graph
-                max_alpha = max(max(alpha_history1), max(alpha_history2), 1)  # Prevent division by zero
-                points1 = [(graph_x_start + i * (graph_width // history_length), graph_y_start + graph_height - int((alpha / max_alpha) * graph_height)) for i, alpha in enumerate(alpha_history1)]
-                points2 = [(graph_x_start + i * (graph_width // history_length), graph_y_start + graph_height - int((alpha / max_alpha) * graph_height)) for i, alpha in enumerate(alpha_history2)]
+                # Draw x-axis and y-axis
+                pygame.draw.line(screen, (0, 0, 0), (graph_x_start, graph_y_start + graph_height), (graph_x_start + graph_width, graph_y_start + graph_height), 2)  # x-axis
+                pygame.draw.line(screen, (0, 0, 0), (graph_x_start, graph_y_start), (graph_x_start, graph_y_start + graph_height), 2)  # y-axis
 
-                # Draw lines for both players' alpha power history
-                pygame.draw.lines(screen, (255, 0, 0), False, points1, 2)
-                pygame.draw.lines(screen, (0, 0, 255), False, points2, 2)
+                # Check if we have enough data points to plot the graph
+                if len(alpha_history1) >= 2 and len(alpha_history2) >= 2:
+                    # Determine dynamic max_alpha and min_alpha based on data
+                    min_alpha = min(min(alpha_history1), min(alpha_history2)) - 5  # Minimum is 5 units below the lowest data point
+                    max_alpha = max(max(alpha_history1), max(alpha_history2)) * 1.1  # Add 10% buffer above the maximum data point
 
+                    # Scale the points for each player's alpha power history
+                    points1 = [(graph_x_start + i * (graph_width // history_length), graph_y_start + graph_height - int(((alpha - min_alpha) / (max_alpha - min_alpha)) * graph_height)) for i, alpha in enumerate(alpha_history1)]
+                    points2 = [(graph_x_start + i * (graph_width // history_length), graph_y_start + graph_height - int(((alpha - min_alpha) / (max_alpha - min_alpha)) * graph_height)) for i, alpha in enumerate(alpha_history2)]
+
+                    # Draw lines for both players' alpha power history
+                    pygame.draw.lines(screen, (255, 0, 0), False, points1, 2)
+                    pygame.draw.lines(screen, (0, 0, 255), False, points2, 2)
+
+                    # Add y-axis labels and tick marks
+                    for i in range(5):
+                        y_value = min_alpha + (max_alpha - min_alpha) * (i / 4)
+                        y_position = graph_y_start + graph_height - int(((y_value - min_alpha) / (max_alpha - min_alpha)) * graph_height)
+                        tick_label = label_font.render(f"{y_value:.1f}", True, (0, 0, 0))
+                        screen.blit(tick_label, (graph_x_start - 40, y_position - tick_label.get_height() // 2))
+                        pygame.draw.line(screen, (0, 0, 0), (graph_x_start - 5, y_position), (graph_x_start, y_position), 2)
+
+                    # Add x-axis labels and tick marks for epochs (starting from 0 on the left and incrementing by 5)
+                    for i in range(0, history_length, 5):
+                        x_position = graph_x_start + i * (graph_width // history_length)
+                        tick_label = label_font.render(f"{i}", True, (0, 0, 0))
+                        screen.blit(tick_label, (x_position - tick_label.get_width() // 2, graph_y_start + graph_height + 5))
+                        pygame.draw.line(screen, (0, 0, 0), (x_position, graph_y_start + graph_height), (x_position, graph_y_start + graph_height + 5), 2)
+
+                # Add x-axis label
+                x_label = label_font.render(f"Epochs ({epoch_duration}s each)", True, (0, 0, 0))
+                screen.blit(x_label, (graph_x_start + graph_width // 2 - x_label.get_width() // 2, graph_y_start + graph_height + 25))
+
+                # Add y-axis label
+                y_label = label_font.render("Alpha Power", True, (0, 0, 0))
+                screen.blit(y_label, (graph_x_start - 155, graph_y_start + graph_height // 2 - y_label.get_height() // 2))
+                
                 center_offset = 300  # Distance from the center
                 bar_max_width = 300  # Maximum width for the bars
                 
@@ -151,7 +211,7 @@ def main():
                 alpha_text2 = alpha_font.render(f'{board2.get_board_name()} Alpha Power: {alpha_power2:.2f} (Avg: {avg_alpha_power2:.2f})', True, (0, 0, 255))
                 screen.blit(alpha_text1, ((width // 2) - center_offset - bar_max_width, 70))
                 screen.blit(alpha_text2, ((width // 2) + 200, 70))
-                
+
                 pygame.display.flip()
 
                 # Check if the rope has completely passed one of the player markers
@@ -184,7 +244,6 @@ def main():
     board1.stop()
     board2.stop()
     pygame.quit()
-
 
 if __name__ == '__main__':
     main()
