@@ -54,6 +54,11 @@ def main():
     board1.setup()
     board2.setup()
     
+    if board1.is_streaming() and board2.is_streaming():
+        print('Both players connected')
+    else:
+        raise Exception('Error connecting both players')
+    
     board1_srate = board1.get_sampling_rate()
     board2_srate = board2.get_sampling_rate()
     

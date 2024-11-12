@@ -225,6 +225,15 @@ class BrainFlowBoardSetup:
         """
         return self.sampling_rate
     
+    def is_streaming(self):
+        """
+        Checks if the BrainFlow board is currently streaming data.
+
+        Returns:
+            bool: True if the board is streaming, False otherwise.
+        """
+        return self.streaming
+    
     def get_board_name(self):
         """
         Prints the name of the BrainFlow board.
