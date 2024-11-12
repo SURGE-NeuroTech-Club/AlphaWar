@@ -225,6 +225,15 @@ class BrainFlowBoardSetup:
         """
         return self.sampling_rate
     
+    def get_board_name(self):
+        """
+        Prints the name of the BrainFlow board.
+
+        This method prints the name of the board, which can be useful for logging
+        or display purposes.
+        """
+        return self.name
+    
     def get_board_data(self):
         """
         Retrieves the current data from the BrainFlow board. - Removes data from ringbuffer
@@ -240,15 +249,6 @@ class BrainFlowBoardSetup:
         else:
             print(f"Board is not set up.")
             return None
-        
-    def get_board_name(self):
-        """
-        Prints the name of the BrainFlow board.
-
-        This method prints the name of the board, which can be useful for logging
-        or display purposes.
-        """
-        return self.name
         
     def get_current_board_data(self, num_samples):
         """

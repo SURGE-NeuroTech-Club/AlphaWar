@@ -99,11 +99,8 @@ def main():
                         quit_game = True
             pygame.display.flip()
             try:
-                # data1 = board1.get_board_data()[1:9, :]   
-                # data2 = board2.get_board_data()[1:9, :] 
-                data1 = board1.get_current_board_data(samples_per_epoch1)
-                data2 = board2.get_current_board_data(samples_per_epoch2)
-                print(data2.shape)
+                data1 = board1.get_current_board_data(samples_per_epoch1)[1:9, :] 
+                data2 = board2.get_current_board_data(samples_per_epoch2)[1:9, :] 
                 time.sleep(epoch_duration)  
             except:
                 print("Couldn't read data...")
